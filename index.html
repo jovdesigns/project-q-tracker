@@ -1,0 +1,1671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Priority Queue Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body{font-family:'Inter',sans-serif}
+        .task-card{transition:all .2s ease}
+        .task-card:hover{transform:translateY(-2px)}
+        .priority-high{border-left:4px solid #ef4444}
+        .priority-medium{border-left:4px solid #f59e0b}
+        .priority-low{border-left:4px solid #10b981}
+        .priority-critical{border-left:4px solid #7f1d1d;background-color:#fee2e2}
+        .board-column{min-height:300px;max-height:70vh;overflow-y:auto}
+        .priority-badge{display:inline-flex;align-items:center;border-radius:9999px;padding:.25rem .75rem;font-size:.75rem;font-weight:500}
+        .priority-badge-critical{background-color:#fee2e2;color:#991b1b}
+        .priority-badge-high{background-color:#ffedd5;color:#9a3412}
+        .priority-badge-medium{background-color:#fef3c7;color:#92400e}
+        .priority-badge-low{background-color:#d1fae5;color:#065f46}
+        .task-card.overdue{box-shadow:0 0 0 2px #ef4444}
+        .task-card.due-soon{box-shadow:0 0 0 2px #f59e0b}
+        .tab-button.active{background-color:#4f46e5;color:white}
+        .tab-button:not(.active){background-color:white;color:#4b5563}
+        .dashboard-card{transition:all .3s ease}
+        .dashboard-card:hover{transform:translateY(-3px)}
+        .progress-bar{height:8px;border-radius:4px;background-color:#e5e7eb}
+        .progress-value{height:100%;border-radius:4px;transition:width .5s ease}
+        .status-history-item{position:relative;padding-left:28px;padding-bottom:16px}
+        .status-history-item:before{content:'';position:absolute;left:7px;top:0;bottom:0;width:2px;background-color:#e5e7eb}
+        .status-history-item:last-child:before{bottom:auto;height:0}
+        .status-dot{position:absolute;left:0;top:0;width:16px;height:16px;border-radius:50%}
+        .status-dot-queue{background-color:#818cf8}
+        .status-dot-inProgress{background-color:#60a5fa}
+        .status-dot-onHold{background-color:#fbbf24}
+        .status-dot-forReview{background-color:#a78bfa}
+        .status-dot-completed{background-color:#34d399}
+        .tip-card{border-left:4px solid #4f46e5;background-color:#eef2ff;transition:all .3s ease}
+        .tip-card:hover{transform:translateY(-2px);box-shadow:0 10px 15px -3px rgba(0,0,0,0.1),0 4px 6px -2px rgba(0,0,0,0.05)}
+        .modal {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+        .modal.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-content {
+            background-color: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            max-width: 28rem;
+            width: 100%;
+            padding: 1.5rem;
+            transform: scale(0.95);
+            transition: transform 0.25s ease;
+        }
+        .modal.active .modal-content {
+            transform: scale(1);
+        }
+        .page {
+            display: none;
+        }
+        .page.active {
+            display: block;
+        }
+        /* Delete confirmation modal */
+        #deleteConfirmModal {
+            z-index: 60;
+        }
+        /* Calendar styles */
+        .calendar-modal .modal-content {
+            max-width: 42rem;
+            padding: 0;
+        }
+        .calendar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+            background-color: #f3f4f6;
+        }
+        .calendar-day-header {
+            background-color: #f9fafb;
+            padding: 0.5rem;
+            text-align: center;
+            font-weight: 500;
+            font-size: 0.875rem;
+            color: #4b5563;
+        }
+        .calendar-day {
+            background-color: white;
+            min-height: 5rem;
+            padding: 0.5rem;
+            position: relative;
+        }
+        .calendar-day.other-month {
+            background-color: #f9fafb;
+            color: #9ca3af;
+        }
+        .calendar-day.today {
+            background-color: #eef2ff;
+        }
+        .calendar-day-number {
+            position: absolute;
+            top: 0.25rem;
+            right: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        .calendar-task {
+            margin-top: 1.5rem;
+            margin-bottom: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+        }
+        .calendar-task.critical {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+        .calendar-task.high {
+            background-color: #ffedd5;
+            color: #9a3412;
+        }
+        .calendar-task.medium {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+        .calendar-task.low {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+    </style>
+</head>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'95fe724510f28b59',t:'MTc1MjYzNjg5My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
+
+<body class="bg-gray-100">
+    <div id="mainPage" class="page active">
+        <header class="bg-white shadow">
+            <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                <div class="flex items-center">
+                    <svg class="h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    <h1 class="text-2xl font-bold text-gray-900 ml-2">Priority Queue Tracker</h1>
+                </div>
+                <div class="flex space-x-3">
+                    <button id="calendarViewBtn" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded-md shadow-sm transition duration-150 ease-in-out flex items-center">
+                        <svg class="h-5 w-5 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Calendar
+                    </button>
+                    <button id="addTaskBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-md shadow-sm transition duration-150 ease-in-out flex items-center">
+                        <svg class="h-5 w-5 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        Add Task
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <!-- Tab Buttons -->
+            <div class="flex flex-wrap gap-2 mb-6">
+                <button id="dashboardTab" class="tab-button active py-2 px-4 rounded-md shadow-sm transition duration-150 ease-in-out flex items-center">
+                    <svg class="h-5 w-5 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                    Dashboard
+                </button>
+                <button id="tasksTab" class="tab-button py-2 px-4 rounded-md shadow-sm transition duration-150 ease-in-out border border-gray-300 flex items-center">
+                    <svg class="h-5 w-5 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    Task Board
+                </button>
+            </div>
+
+            <!-- Dashboard View -->
+            <div id="dashboardView">
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="dashboard-card bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg shadow-md p-6 text-white">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-indigo-100">Total Tasks</p>
+                                <p id="totalTasksCount" class="text-3xl font-bold mt-1">0</p>
+                                <div class="flex items-center mt-2">
+                                    <div class="w-full bg-indigo-200 rounded-full h-2">
+                                        <div id="completionRateBar" class="bg-white rounded-full h-2" style="width: 0%"></div>
+                                    </div>
+                                    <span id="completionRate" class="text-xs ml-2">0%</span>
+                                </div>
+                                <p class="text-xs mt-1 text-indigo-100">Completion rate</p>
+                            </div>
+                            <div class="bg-white bg-opacity-20 rounded-full p-3">
+                                <svg class="h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-card bg-gradient-to-br from-amber-500 to-amber-600 rounded-lg shadow-md p-6 text-white">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-amber-100">Critical & High</p>
+                                <p id="highPriorityCount" class="text-3xl font-bold mt-1">0</p>
+                                <div class="flex items-center mt-2">
+                                    <div class="w-full bg-amber-200 rounded-full h-2">
+                                        <div id="highPriorityRateBar" class="bg-white rounded-full h-2" style="width: 0%"></div>
+                                    </div>
+                                    <span id="highPriorityRate" class="text-xs ml-2">0%</span>
+                                </div>
+                                <p class="text-xs mt-1 text-amber-100">Of total tasks</p>
+                            </div>
+                            <div class="bg-white bg-opacity-20 rounded-full p-3">
+                                <svg class="h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'95fe750192cfe2ec',t:'MTc1MjYzNzAwNS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
+
+   <div class="dashboard-card bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-md p-6 text-white">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-blue-100">In Progress</p>
+                                <p id="inProgressCount" class="text-3xl font-bold mt-1">0</p>
+                                <div class="flex items-center mt-2">
+                                    <div class="w-full bg-blue-200 rounded-full h-2">
+                                        <div id="inProgressRateBar" class="bg-white rounded-full h-2" style="width: 0%"></div>
+                                    </div>
+                                    <span id="inProgressRate" class="text-xs ml-2">0%</span>
+                                </div>
+                                <p class="text-xs mt-1 text-blue-100">Of total tasks</p>
+                            </div>
+                            <div class="bg-white bg-opacity-20 rounded-full p-3">
+                                <svg class="h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-card bg-gradient-to-br from-green-500 to-green-600 rounded-lg shadow-md p-6 text-white">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-green-100">Completed</p>
+                                <p id="completedCount" class="text-3xl font-bold mt-1">0</p>
+                                <div class="flex items-center mt-2">
+                                    <div class="w-full bg-green-200 rounded-full h-2">
+                                        <div id="completedRateBar" class="bg-white rounded-full h-2" style="width: 0%"></div>
+                                    </div>
+                                    <span id="completedRate" class="text-xs ml-2">0%</span>
+                                </div>
+                                <p class="text-xs mt-1 text-green-100">Of total tasks</p>
+                            </div>
+                            <div class="bg-white bg-opacity-20 rounded-full p-3">
+                                <svg class="h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Priority Distribution & Upcoming Deadlines -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <!-- Priority Distribution -->
+                    <div class="bg-white rounded-lg shadow-md p-6">
+                        <h2 class="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                            <svg class="h-5 w-5 mr-2 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+                            </svg>
+                            Priority Distribution
+                        </h2>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium text-gray-700">Critical</span>
+                                    <span id="criticalPercent" class="text-sm text-gray-500">0%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div id="criticalBar" class="progress-value bg-red-600" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium text-gray-700">High</span>
+                                    <span id="highPercent" class="text-sm text-gray-500">0%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div id="highBar" class="progress-value bg-orange-500" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium text-gray-700">Medium</span>
+                                    <span id="mediumPercent" class="text-sm text-gray-500">0%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div id="mediumBar" class="progress-value bg-amber-500" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium text-gray-700">Low</span>
+                                    <span id="lowPercent" class="text-sm text-gray-500">0%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div id="lowBar" class="progress-value bg-green-500" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Priority Distribution Recommendations -->
+                        <div class="mt-6 tip-card p-4 rounded-md">
+                            <h3 class="text-sm font-medium text-indigo-800 mb-2 flex items-center">
+                                <svg class="h-4 w-4 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Why Priority Distribution Matters
+                            </h3>
+                            <p class="text-xs text-gray-700 mb-2">
+                                Monitoring your priority distribution helps you identify workload imbalances and make better planning decisions. 
+                                A healthy distribution typically has fewer critical/high priority tasks and more medium/low priority tasks.
+                            </p>
+                            <div id="priorityRecommendation" class="text-xs text-indigo-700 font-medium">
+                                <!-- Dynamic recommendation will appear here -->
+                            </div>
+                        </div>
+                    </div>
+					
+                    <!-- Upcoming Deadlines -->
+                    <div class="bg-white rounded-lg shadow-md p-6">
+                        <h2 class="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                            <svg class="h-5 w-5 mr-2 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            Upcoming Deadlines
+                        </h2>
+                        <div id="upcomingDeadlines" class="space-y-3 max-h-64 overflow-y-auto">
+                            <div class="flex items-center justify-center h-32 text-gray-500">
+                                <p>No upcoming deadlines</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Task Board View -->
+            <div id="taskBoardView" class="hidden">
+                <!-- Filter Controls -->
+                <div class="mb-6 bg-white rounded-lg shadow-md p-4">
+                    <div class="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                            <label for="priorityFilter" class="block text-sm font-medium text-gray-700">Filter by Priority</label>
+                            <select id="priorityFilter" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                                <option value="">All Priorities</option>
+                                <option value="critical">Critical</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="sortBy" class="block text-sm font-medium text-gray-700">Sort By</label>
+                            <select id="sortBy" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                                <option value="priority">Priority</option>
+                                <option value="dueDate">Due Date</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <!-- Priority Queue Column -->
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="p-4 border-b border-gray-200 flex items-center justify-between bg-indigo-50">
+                            <h2 class="text-lg font-medium text-indigo-900 flex items-center">
+                                <svg class="h-5 w-5 mr-2 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                </svg>
+                                Queue
+                            </h2>
+                            <span id="queueCount" class="bg-indigo-100 text-indigo-800 text-xs font-medium px-2.5 py-0.5 rounded-full">0</span>
+                        </div>
+                        <div id="priorityQueue" class="board-column p-4 space-y-3" data-status="queue"></div>
+                    </div>
+
+                    <!-- In Progress Column -->
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="p-4 border-b border-gray-200 flex items-center justify-between bg-blue-50">
+                            <h2 class="text-lg font-medium text-blue-900 flex items-center">
+                                <svg class="h-5 w-5 mr-2 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                In Progress
+                            </h2>
+                            <span id="inProgressBoardCount" class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">0</span>
+                        </div>
+                        <div id="inProgress" class="board-column p-4 space-y-3" data-status="inProgress"></div>
+                    </div>
+
+                    <!-- For Review Column -->
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="p-4 border-b border-gray-200 flex items-center justify-between bg-purple-50">
+                            <h2 class="text-lg font-medium text-purple-900 flex items-center">
+                                <svg class="h-5 w-5 mr-2 text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                For Review
+                            </h2>
+                            <span id="reviewCount" class="bg-purple-100 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded-full">0</span>
+                        </div>
+                        <div id="forReview" class="board-column p-4 space-y-3" data-status="forReview"></div>
+                    </div>
+
+                    <!-- Completed Column -->
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="p-4 border-b border-gray-200 flex items-center justify-between bg-green-50">
+                            <h2 class="text-lg font-medium text-green-900 flex items-center">
+                                <svg class="h-5 w-5 mr-2 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                Completed
+                            </h2>
+                            <span id="completedBoardCount" class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">0</span>
+                        </div>
+                        <div id="completed" class="board-column p-4 space-y-3" data-status="completed"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add Task Page -->
+    <div id="addTaskPage" class="page">
+        <header class="bg-white shadow">
+            <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                <div class="flex items-center">
+                    <svg class="h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    <h1 class="text-2xl font-bold text-gray-900 ml-2">Priority Queue Tracker</h1>
+                </div>
+                <button id="backToMainBtn" class="text-gray-500 hover:text-gray-700 flex items-center">
+                    <svg class="h-5 w-5 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Back to Dashboard
+                </button>
+            </div>
+        </header>
+
+        <main class="max-w-3xl mx-auto py-6 sm:px-6 lg:px-8">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-medium text-gray-900 flex items-center">
+                        <svg class="h-6 w-6 mr-2 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        Add New Task
+                    </h2>
+                </div>
+                
+                <form id="addTaskForm" class="space-y-6">
+                    <div>
+                        <label for="newTaskName" class="block text-sm font-medium text-gray-700">Task Name</label>
+                        <input type="text" id="newTaskName" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                    </div>
+                    
+                    <div>
+                        <label for="newTaskDescription" class="block text-sm font-medium text-gray-700">Description</label>
+                        <textarea id="newTaskDescription" rows="4" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                    </div>
+                    
+                    <div>
+                        <label for="newTaskAssignedTo" class="block text-sm font-medium text-gray-700">Assigned To</label>
+                        <input type="text" id="newTaskAssignedTo" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Enter name or leave blank">
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="newTaskPriority" class="block text-sm font-medium text-gray-700">Priority</label>
+                            <select id="newTaskPriority" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                <option value="critical">Critical</option>
+                                <option value="high">High</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label for="newTaskStatus" class="block text-sm font-medium text-gray-700">Status</label>
+                            <select id="newTaskStatus" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                <option value="queue">Priority Queue</option>
+                                <option value="inProgress">In Progress</option>
+                                <option value="forReview">For Review</option>
+                                <option value="completed">Completed</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="newTaskDueDate" class="block text-sm font-medium text-gray-700">Due Date</label>
+                        <input type="date" id="newTaskDueDate" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    
+                    <div class="flex justify-end pt-4">
+                        <button type="button" id="cancelAddBtn" class="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 mr-3">
+                            Cancel
+                        </button>
+                        <button type="submit" class="bg-indigo-600 border border-transparent rounded-md shadow-sm py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Add Task
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <!-- Task Modal -->
+    <div id="taskModal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="modalTitle" class="text-lg font-medium text-gray-900">Task Details</h3>
+                <button id="closeModal" class="text-gray-400 hover:text-gray-500">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div id="taskDetails" class="space-y-4">
+                <!-- Task details will be populated here -->
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button id="editTaskBtn" class="bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700">
+                    Edit Task
+                </button>
+                <button id="closeTaskBtn" class="bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Task Modal -->
+    <div id="editTaskModal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium text-gray-900">Edit Task</h3>
+                <button id="closeEditModal" class="text-gray-400 hover:text-gray-500">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <form id="editTaskForm" class="space-y-4">
+                <input type="hidden" id="editTaskId">
+                <div>
+                    <label for="editTaskName" class="block text-sm font-medium text-gray-700">Task Name</label>
+                    <input type="text" id="editTaskName" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                </div>
+                <div>
+                    <label for="editTaskDescription" class="block text-sm font-medium text-gray-700">Description</label>
+                    <textarea id="editTaskDescription" rows="3" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                </div>
+                <div>
+                    <label for="editTaskAssignedTo" class="block text-sm font-medium text-gray-700">Assigned To</label>
+                    <input type="text" id="editTaskAssignedTo" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Enter name or leave blank">
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="editTaskPriority" class="block text-sm font-medium text-gray-700">Priority</label>
+                        <select id="editTaskPriority" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="critical">Critical</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="editTaskStatus" class="block text-sm font-medium text-gray-700">Status</label>
+                        <select id="editTaskStatus" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="queue">Priority Queue</option>
+                            <option value="inProgress">In Progress</option>
+                            <option value="forReview">For Review</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                    </div>
+                </div>
+
+
+                <div>
+                    <label for="editTaskDueDate" class="block text-sm font-medium text-gray-700">Due Date</label>
+                    <input type="date" id="editTaskDueDate" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                
+                <div class="flex justify-end pt-4">
+                    <button type="button" id="cancelEditBtn" class="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 mr-3">
+                        Cancel
+                    </button>
+                    <button type="submit" class="bg-indigo-600 border border-transparent rounded-md shadow-sm py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteConfirmModal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium text-gray-900">Confirm Delete</h3>
+                <button id="closeDeleteModal" class="text-gray-400 hover:text-gray-500">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="mb-6">
+                <p class="text-sm text-gray-600">Are you sure you want to delete this task? This action cannot be undone.</p>
+                <p id="deleteTaskName" class="mt-2 text-sm font-medium text-gray-900"></p>
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button id="cancelDeleteBtn" class="bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300">
+                    Cancel
+                </button>
+                <button id="confirmDeleteBtn" class="bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700">
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calendar Modal -->
+    <div id="calendarModal" class="modal calendar-modal">
+        <div class="modal-content">
+            <div class="calendar-header">
+                <div class="flex items-center">
+                    <h3 class="text-lg font-medium text-gray-900">Task Calendar</h3>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button id="prevMonthBtn" class="p-1 rounded-full hover:bg-gray-100">
+                        <svg class="h-6 w-6 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        </svg>
+                    </button>
+                    <span id="currentMonthYear" class="text-sm font-medium text-gray-700">January 2023</span>
+                    <button id="nextMonthBtn" class="p-1 rounded-full hover:bg-gray-100">
+                        <svg class="h-6 w-6 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </button>
+                    <button id="closeCalendarBtn" class="ml-4 text-gray-400 hover:text-gray-500">
+                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="calendar-grid">
+                <div class="calendar-day-header">Sun</div>
+                <div class="calendar-day-header">Mon</div>
+                <div class="calendar-day-header">Tue</div>
+                <div class="calendar-day-header">Wed</div>
+                <div class="calendar-day-header">Thu</div>
+                <div class="calendar-day-header">Fri</div>
+                <div class="calendar-day-header">Sat</div>
+                <!-- Calendar days will be populated here -->
+            </div>
+            <div class="p-4 bg-gray-50 border-t border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center">
+                            <div class="w-3 h-3 bg-red-200 rounded-full mr-1"></div>
+                            <span class="text-xs text-gray-600">Critical</span>
+                        </div>
+                        <div class="flex items-center">
+                            <div class="w-3 h-3 bg-orange-200 rounded-full mr-1"></div>
+                            <span class="text-xs text-gray-600">High</span>
+                        </div>
+                        <div class="flex items-center">
+                            <div class="w-3 h-3 bg-amber-200 rounded-full mr-1"></div>
+                            <span class="text-xs text-gray-600">Medium</span>
+                        </div>
+                        <div class="flex items-center">
+                            <div class="w-3 h-3 bg-green-200 rounded-full mr-1"></div>
+                            <span class="text-xs text-gray-600">Low</span>
+                        </div>
+                    </div>
+                    <button id="todayBtn" class="text-xs text-indigo-600 font-medium hover:text-indigo-800">
+                        Today
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize tasks array
+            let tasks = [];
+
+            // Try to load tasks from localStorage
+            const savedTasks = localStorage.getItem('priorityQueueTasks');
+            if (savedTasks) {
+                try {
+                    tasks = JSON.parse(savedTasks);
+                } catch (e) {
+                    console.error("Error parsing saved tasks:", e);
+                    tasks = [];
+                    localStorage.removeItem('priorityQueueTasks');
+                }
+            }
+
+            // Calendar variables
+            let currentDate = new Date();
+            let currentMonth = currentDate.getMonth();
+            let currentYear = currentDate.getFullYear();
+
+            // Initialize views
+            initializeApp();
+
+            function initializeApp() {
+                // Set up tab navigation
+                setupTabNavigation();
+                
+                // Initialize dashboard
+                updateDashboard();
+                
+                // Initialize task board
+                renderTaskBoard();
+                
+                // Set up event listeners
+                setupEventListeners();
+            }
+
+            function setupTabNavigation() {
+                const dashboardTab = document.getElementById('dashboardTab');
+                const tasksTab = document.getElementById('tasksTab');
+                
+                const dashboardView = document.getElementById('dashboardView');
+                const taskBoardView = document.getElementById('taskBoardView');
+                
+                dashboardTab.addEventListener('click', function() {
+                    setActiveTab(dashboardTab);
+                    showView(dashboardView);
+                    updateDashboard();
+                });
+                
+                tasksTab.addEventListener('click', function() {
+                    setActiveTab(tasksTab);
+                    showView(taskBoardView);
+                    renderTaskBoard();
+                });
+            }
+
+            function setActiveTab(activeTab) {
+                const tabs = [
+                    document.getElementById('dashboardTab'),
+                    document.getElementById('tasksTab')
+                ];
+                
+                tabs.forEach(tab => {
+                    if (tab === activeTab) {
+                        tab.classList.add('active');
+                        tab.classList.remove('border', 'border-gray-300');
+                    } else {
+                        tab.classList.remove('active');
+                        tab.classList.add('border', 'border-gray-300');
+                    }
+                });
+            }
+
+            function showView(activeView) {
+                const views = [
+                    document.getElementById('dashboardView'),
+                    document.getElementById('taskBoardView')
+                ];
+                
+                views.forEach(view => {
+                    if (view === activeView) {
+                        view.classList.remove('hidden');
+                    } else {
+                        view.classList.add('hidden');
+                    }
+                });
+            }
+
+            function updateDashboard() {
+                const totalTasks = tasks.length;
+                const completedTasks = tasks.filter(task => task.status === 'completed').length;
+                const highPriorityTasks = tasks.filter(task => task.priority === 'critical' || task.priority === 'high').length;
+                const inProgressTasks = tasks.filter(task => task.status === 'inProgress').length;
+                
+                // Update summary cards
+                document.getElementById('totalTasksCount').textContent = totalTasks;
+                document.getElementById('completedCount').textContent = completedTasks;
+                document.getElementById('highPriorityCount').textContent = highPriorityTasks;
+                document.getElementById('inProgressCount').textContent = inProgressTasks;
+                
+                // Calculate percentages
+                const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+                const highPriorityRate = totalTasks > 0 ? Math.round((highPriorityTasks / totalTasks) * 100) : 0;
+                const inProgressRate = totalTasks > 0 ? Math.round((inProgressTasks / totalTasks) * 100) : 0;
+                const completedRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+                
+                // Update percentage displays
+                document.getElementById('completionRate').textContent = `${completionRate}%`;
+                document.getElementById('highPriorityRate').textContent = `${highPriorityRate}%`;
+                document.getElementById('inProgressRate').textContent = `${inProgressRate}%`;
+                document.getElementById('completedRate').textContent = `${completedRate}%`;
+                
+                // Update progress bars
+                document.getElementById('completionRateBar').style.width = `${completionRate}%`;
+                document.getElementById('highPriorityRateBar').style.width = `${highPriorityRate}%`;
+                document.getElementById('inProgressRateBar').style.width = `${inProgressRate}%`;
+                document.getElementById('completedRateBar').style.width = `${completedRate}%`;
+                
+                // Update priority distribution
+                updatePriorityDistribution();
+                
+                // Update upcoming deadlines
+                updateUpcomingDeadlines();
+            }
+
+            function updatePriorityDistribution() {
+                const totalTasks = tasks.length;
+                const criticalTasks = tasks.filter(task => task.priority === 'critical').length;
+                const highTasks = tasks.filter(task => task.priority === 'high').length;
+                const mediumTasks = tasks.filter(task => task.priority === 'medium').length;
+                const lowTasks = tasks.filter(task => task.priority === 'low').length;
+                
+                const criticalPercent = totalTasks > 0 ? Math.round((criticalTasks / totalTasks) * 100) : 0;
+                const highPercent = totalTasks > 0 ? Math.round((highTasks / totalTasks) * 100) : 0;
+                const mediumPercent = totalTasks > 0 ? Math.round((mediumTasks / totalTasks) * 100) : 0;
+                const lowPercent = totalTasks > 0 ? Math.round((lowTasks / totalTasks) * 100) : 0;
+                
+                document.getElementById('criticalPercent').textContent = `${criticalPercent}%`;
+                document.getElementById('highPercent').textContent = `${highPercent}%`;
+                document.getElementById('mediumPercent').textContent = `${mediumPercent}%`;
+                document.getElementById('lowPercent').textContent = `${lowPercent}%`;
+                
+                document.getElementById('criticalBar').style.width = `${criticalPercent}%`;
+                document.getElementById('highBar').style.width = `${highPercent}%`;
+                document.getElementById('mediumBar').style.width = `${mediumPercent}%`;
+                document.getElementById('lowBar').style.width = `${lowPercent}%`;
+
+                // Generate priority distribution recommendation
+                const recommendationEl = document.getElementById('priorityRecommendation');
+                
+                // Calculate total high urgency percentage
+                const highUrgencyPercent = criticalPercent + highPercent;
+                
+                if (totalTasks === 0) {
+                    recommendationEl.innerHTML = 'Add tasks to see priority distribution recommendations.';
+                } else if (highUrgencyPercent > 50) {
+                    recommendationEl.innerHTML = `
+                        <svg class="inline-block h-3 w-3 mr-1 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span>High urgency tasks (${highUrgencyPercent}%) dominate your workload. Consider re-evaluating priorities or delegating some tasks.</span>
+                    `;
+                } else if (criticalPercent > 20) {
+                    recommendationEl.innerHTML = `
+                        <svg class="inline-block h-3 w-3 mr-1 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span>Critical tasks (${criticalPercent}%) are above recommended levels. Focus on completing these first to reduce urgency.</span>
+                    `;
+                } else if (lowPercent < 20 && totalTasks > 5) {
+                    recommendationEl.innerHTML = `
+                        <svg class="inline-block h-3 w-3 mr-1 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Consider adding more low-priority tasks for better workload balance and to capture all work items.</span>
+                    `;
+                } else if (mediumPercent > 60) {
+                    recommendationEl.innerHTML = `
+                        <svg class="inline-block h-3 w-3 mr-1 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Most tasks (${mediumPercent}%) are medium priority. Consider re-evaluating to better differentiate importance.</span>
+                    `;
+                } else {
+                    recommendationEl.innerHTML = `
+                        <svg class="inline-block h-3 w-3 mr-1 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>Your priority distribution looks balanced. Continue monitoring as new tasks are added.</span>
+                    `;
+                }
+            }
+
+            function updateUpcomingDeadlines() {
+                const upcomingDeadlines = document.getElementById('upcomingDeadlines');
+                upcomingDeadlines.innerHTML = '';
+                
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                const tasksWithDueDates = tasks.filter(task => 
+                    task.dueDate && 
+                    task.status !== 'completed' && 
+                    new Date(task.dueDate) >= today
+                );
+                
+                if (tasksWithDueDates.length === 0) {
+                    upcomingDeadlines.innerHTML = `
+                        <div class="flex items-center justify-center h-32 text-gray-500">
+                            <p>No upcoming deadlines</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                tasksWithDueDates.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+                
+                const nextSevenDays = tasksWithDueDates.filter(task => {
+                    const dueDate = new Date(task.dueDate);
+                    const sevenDaysLater = new Date(today);
+                    sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+                    return dueDate <= sevenDaysLater;
+                }).slice(0, 5);
+                
+                nextSevenDays.forEach(task => {
+                    const dueDate = new Date(task.dueDate);
+                    const daysUntilDue = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+                    
+                    let dueDateDisplay;
+                    if (daysUntilDue === 0) {
+                        dueDateDisplay = 'Today';
+                    } else if (daysUntilDue === 1) {
+                        dueDateDisplay = 'Tomorrow';
+                    } else {
+                        dueDateDisplay = dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    }
+                    
+                    let priorityColor = '';
+                    switch (task.priority) {
+                        case 'critical': priorityColor = 'bg-red-100 text-red-800'; break;
+                        case 'high': priorityColor = 'bg-orange-100 text-orange-800'; break;
+                        case 'medium': priorityColor = 'bg-amber-100 text-amber-800'; break;
+                        case 'low': priorityColor = 'bg-green-100 text-green-800'; break;
+                    }
+                    
+                    const deadlineItem = document.createElement('div');
+                    deadlineItem.className = 'flex items-center justify-between p-3 bg-white border border-gray-200 rounded-md cursor-pointer hover:bg-gray-50';
+                    deadlineItem.innerHTML = `
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">${task.name}</h4>
+                            <div class="flex items-center mt-1">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${priorityColor}">
+                                    ${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                                </span>
+                                ${task.assignedTo ? `
+                                    <span class="ml-2 text-xs text-gray-500">
+                                        Assigned to ${task.assignedTo}
+                                    </span>
+                                ` : ''}
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm font-medium ${daysUntilDue <= 1 ? 'text-red-600' : daysUntilDue <= 3 ? 'text-orange-500' : 'text-gray-900'}">
+                                ${dueDateDisplay}
+                            </p>
+                            <p class="text-xs text-gray-500">
+                                ${daysUntilDue === 0 ? 'Due today' : daysUntilDue === 1 ? 'Due tomorrow' : `In ${daysUntilDue} days`}
+                            </p>
+                        </div>
+                    `;
+                    
+                    deadlineItem.addEventListener('click', function() {
+                        showTaskDetails(task.id);
+                    });
+                    
+                    upcomingDeadlines.appendChild(deadlineItem);
+                });
+            }
+
+            function renderTaskBoard() {
+                const priorityFilter = document.getElementById('priorityFilter').value;
+                const sortBy = document.getElementById('sortBy').value;
+                
+                let filteredTasks = [...tasks];
+                
+                // Apply priority filter
+                if (priorityFilter) {
+                    filteredTasks = filteredTasks.filter(task => task.priority === priorityFilter);
+                }
+                
+                // Apply sorting
+                const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+                
+                if (sortBy === 'priority') {
+                    filteredTasks.sort((a, b) => {
+                        const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
+                        return priorityDiff !== 0 ? priorityDiff : new Date(a.dueDate || '9999-12-31') - new Date(b.dueDate || '9999-12-31');
+                    });
+                } else if (sortBy === 'dueDate') {
+                    filteredTasks.sort((a, b) => new Date(a.dueDate || '9999-12-31') - new Date(b.dueDate || '9999-12-31'));
+                }
+                
+                // Clear all columns
+                document.getElementById('priorityQueue').innerHTML = '';
+                document.getElementById('inProgress').innerHTML = '';
+                document.getElementById('forReview').innerHTML = '';
+                document.getElementById('completed').innerHTML = '';
+                
+                // Count tasks by status
+                const counts = { queue: 0, inProgress: 0, forReview: 0, completed: 0 };
+                
+                // Render tasks in their respective columns
+                filteredTasks.forEach(task => {
+                    const taskCard = createTaskCard(task);
+                    
+                    switch (task.status) {
+                        case 'queue':
+                            document.getElementById('priorityQueue').appendChild(taskCard);
+                            counts.queue++;
+                            break;
+                        case 'inProgress':
+                            document.getElementById('inProgress').appendChild(taskCard);
+                            counts.inProgress++;
+                            break;
+                        case 'forReview':
+                            document.getElementById('forReview').appendChild(taskCard);
+                            counts.forReview++;
+                            break;
+                        case 'completed':
+                            document.getElementById('completed').appendChild(taskCard);
+                            counts.completed++;
+                            break;
+                    }
+                });
+                
+                // Update counts
+                document.getElementById('queueCount').textContent = counts.queue;
+                document.getElementById('inProgressBoardCount').textContent = counts.inProgress;
+                document.getElementById('reviewCount').textContent = counts.forReview;
+                document.getElementById('completedBoardCount').textContent = counts.completed;
+            }
+
+            function createTaskCard(task) {
+                const taskCard = document.createElement('div');
+                
+                // Determine date status
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                let dateStatus = 'none';
+                let daysUntilDue = null;
+                
+                if (task.dueDate) {
+                    const dueDate = new Date(task.dueDate);
+                    dueDate.setHours(0, 0, 0, 0);
+                    
+                    if (dueDate < today) {
+                        dateStatus = 'overdue';
+                        daysUntilDue = Math.ceil((today - dueDate) / (1000 * 60 * 60 * 24));
+                    } else if (dueDate.getTime() === today.getTime()) {
+                        dateStatus = 'today';
+                        daysUntilDue = 0;
+                    } else {
+                        dateStatus = 'upcoming';
+                        daysUntilDue = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+                    }
+                }
+                
+                // Set card classes
+                let cardClasses = `task-card bg-white p-4 rounded-md shadow-sm border border-gray-200 priority-${task.priority}`;
+                
+                if (task.status !== 'completed' && task.dueDate) {
+                    if (dateStatus === 'overdue') {
+                        cardClasses += ' overdue';
+                    } else if (dateStatus === 'today' || (dateStatus === 'upcoming' && daysUntilDue <= 2)) {
+                        cardClasses += ' due-soon';
+                    }
+                }
+                
+                taskCard.className = cardClasses;
+                taskCard.id = task.id;
+                taskCard.dataset.taskId = task.id;
+                
+                // Format due date for display
+                let dueDateDisplay = 'No due date';
+                let dueDateClass = 'text-gray-500';
+                
+                if (task.dueDate) {
+                    const dueDate = new Date(task.dueDate);
+                    
+                    if (dateStatus === 'today') {
+                        dueDateDisplay = 'Today';
+                    } else if (dateStatus === 'overdue') {
+                        dueDateDisplay = `${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) !== 1 ? 's' : ''} overdue`;
+                    } else {
+                        dueDateDisplay = dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    }
+                    
+                    if (dateStatus === 'overdue' && task.status !== 'completed') {
+                        dueDateClass = 'text-red-600 font-medium';
+                    } else if (dateStatus === 'today' || (dateStatus === 'upcoming' && daysUntilDue <= 2)) {
+                        dueDateClass = 'text-orange-500 font-medium';
+                    }
+                }
+                
+                // Create card content
+                taskCard.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <h3 class="text-sm font-medium text-gray-900">${task.name}</h3>
+                        <div class="flex space-x-2">
+                            <button class="edit-task-btn text-gray-400 hover:text-gray-500" data-task-id="${task.id}">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                            </button>
+                            <button class="delete-task-btn text-gray-400 hover:text-red-500" data-task-id="${task.id}">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    ${task.description ? `<p class="mt-1 text-xs text-gray-500 line-clamp-2">${task.description}</p>` : ''}
+                    <div class="mt-3 flex justify-between items-center">
+                        <div class="flex items-center">
+                            <span class="priority-badge priority-badge-${task.priority} text-xs">
+                                ${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                            </span>
+                        </div>
+                        <div class="flex items-center">
+                            <svg class="h-3 w-3 ${dueDateClass} mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span class="text-xs ${dueDateClass}">
+                                ${dueDateDisplay}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="mt-2 flex items-center justify-between">
+                        ${task.assignedTo ? 
+                            `<div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="h-5 w-5 rounded-full bg-indigo-100 flex items-center justify-center">
+                                        <span class="text-xs font-medium text-indigo-800">${task.assignedTo.charAt(0).toUpperCase()}</span>
+                                    </div>
+                                </div>
+                                <span class="ml-1.5 text-xs text-gray-500">${task.assignedTo}</span>
+                            </div>` : 
+                            `<div></div>`
+                        }
+                        <div class="flex items-center">
+                            <span class="text-xs text-gray-400">${getStatusDisplayName(task.status)}</span>
+                        </div>
+                    </div>
+                `;
+                
+                // Add event listeners
+                taskCard.addEventListener('click', function(e) {
+                    if (!e.target.closest('button')) {
+                        showTaskDetails(task.id);
+                    }
+                });
+                
+                const editBtn = taskCard.querySelector('.edit-task-btn');
+                editBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    editTask(task.id);
+                });
+                
+                const deleteBtn = taskCard.querySelector('.delete-task-btn');
+                deleteBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    showDeleteConfirmation(task.id);
+                });
+                
+                return taskCard;
+            }
+
+            function getStatusDisplayName(status) {
+                switch (status) {
+                    case 'queue': return 'In Queue';
+                    case 'inProgress': return 'In Progress';
+                    case 'forReview': return 'For Review';
+                    case 'completed': return 'Completed';
+                    default: return status;
+                }
+            }
+
+            function showTaskDetails(taskId) {
+                const task = tasks.find(t => t.id === taskId);
+                if (!task) return;
+                
+                const taskDetails = document.getElementById('taskDetails');
+                
+                // Format due date for display
+                const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+                const formattedDueDate = dueDate ? 
+                    dueDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 
+                    'No due date';
+                
+                // Priority badge color
+                let priorityColor = '';
+                switch (task.priority) {
+                    case 'critical': priorityColor = 'bg-red-100 text-red-800'; break;
+                    case 'high': priorityColor = 'bg-orange-100 text-orange-800'; break;
+                    case 'medium': priorityColor = 'bg-amber-100 text-amber-800'; break;
+                    case 'low': priorityColor = 'bg-green-100 text-green-800'; break;
+                }
+                
+                // Status badge color
+                let statusColor = '';
+                let statusText = '';
+                switch (task.status) {
+                    case 'queue': 
+                        statusColor = 'bg-indigo-100 text-indigo-800'; 
+                        statusText = 'In Queue';
+                        break;
+                    case 'inProgress': 
+                        statusColor = 'bg-blue-100 text-blue-800'; 
+                        statusText = 'In Progress';
+                        break;
+                    case 'forReview': 
+                        statusColor = 'bg-purple-100 text-purple-800'; 
+                        statusText = 'For Review';
+                        break;
+                    case 'completed': 
+                        statusColor = 'bg-green-100 text-green-800'; 
+                        statusText = 'Completed';
+                        break;
+                }
+                
+                taskDetails.innerHTML = `
+                    <h4 class="text-xl font-medium text-gray-900">${task.name}</h4>
+                    
+                    <div class="flex flex-wrap gap-2 mt-2">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${priorityColor}">
+                            ${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)} Priority
+                        </span>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColor}">
+                            ${statusText}
+                        </span>
+                    </div>
+                    
+                    ${task.description ? `
+                        <div class="mt-4">
+                            <h5 class="text-sm font-medium text-gray-700">Description</h5>
+                            <p class="mt-1 text-sm text-gray-600">${task.description}</p>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="mt-4 grid grid-cols-2 gap-4">
+                        <div>
+                            <h5 class="text-sm font-medium text-gray-700">Due Date</h5>
+                            <p class="mt-1 text-sm text-gray-600">${formattedDueDate}</p>
+                        </div>
+                        <div>
+                            <h5 class="text-sm font-medium text-gray-700">Assigned To</h5>
+                            <p class="mt-1 text-sm text-gray-600">${task.assignedTo || 'Unassigned'}</p>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('modalTitle').textContent = 'Task Details';
+                const modal = document.getElementById('taskModal');
+                modal.classList.add('active');
+                
+                // Store the task ID for the edit button
+                document.getElementById('editTaskBtn').dataset.taskId = taskId;
+            }
+
+            function editTask(taskId) {
+                const task = tasks.find(t => t.id === taskId);
+                if (!task) return;
+                
+                // Populate the edit form
+                document.getElementById('editTaskId').value = task.id;
+                document.getElementById('editTaskName').value = task.name;
+                document.getElementById('editTaskDescription').value = task.description || '';
+                document.getElementById('editTaskAssignedTo').value = task.assignedTo || '';
+                document.getElementById('editTaskPriority').value = task.priority;
+                document.getElementById('editTaskStatus').value = task.status;
+                document.getElementById('editTaskDueDate').value = task.dueDate || '';
+                
+                // Show the edit modal
+                const editModal = document.getElementById('editTaskModal');
+                editModal.classList.add('active');
+                
+                // Close the task details modal if it's open
+                const taskModal = document.getElementById('taskModal');
+                taskModal.classList.remove('active');
+            }
+
+            function showDeleteConfirmation(taskId) {
+                const task = tasks.find(t => t.id === taskId);
+                if (!task) return;
+                
+                // Set the task name in the confirmation modal
+                document.getElementById('deleteTaskName').textContent = task.name;
+                
+                // Store the task ID for the confirm delete button
+                document.getElementById('confirmDeleteBtn').dataset.taskId = taskId;
+                
+                // Show the delete confirmation modal
+                const deleteModal = document.getElementById('deleteConfirmModal');
+                deleteModal.classList.add('active');
+            }
+
+            function deleteTask(taskId) {
+                const index = tasks.findIndex(task => task.id === taskId);
+                if (index !== -1) {
+                    tasks.splice(index, 1);
+                    localStorage.setItem('priorityQueueTasks', JSON.stringify(tasks));
+                    
+                    // Update all views
+                    updateDashboard();
+                    renderTaskBoard();
+                }
+            }
+
+            function formatDate(date) {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
+            // Calendar functions
+            function renderCalendar(month, year) {
+                const calendarGrid = document.querySelector('.calendar-grid');
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                const firstDayOfMonth = new Date(year, month, 1).getDay();
+                
+                // Update month/year display
+                document.getElementById('currentMonthYear').textContent = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                
+                // Clear existing calendar days (except headers)
+                const dayHeaders = Array.from(calendarGrid.querySelectorAll('.calendar-day-header'));
+                calendarGrid.innerHTML = '';
+                dayHeaders.forEach(header => calendarGrid.appendChild(header));
+                
+                // Get previous month's days to display
+                const prevMonth = month === 0 ? 11 : month - 1;
+                const prevMonthYear = month === 0 ? year - 1 : year;
+                const daysInPrevMonth = new Date(prevMonthYear, prevMonth + 1, 0).getDate();
+                
+                // Add previous month's days
+                for (let i = firstDayOfMonth - 1; i >= 0; i--) {
+                    const dayNumber = daysInPrevMonth - i;
+                    const dayElement = createCalendarDay(dayNumber, 'other-month', new Date(prevMonthYear, prevMonth, dayNumber));
+                    calendarGrid.appendChild(dayElement);
+                }
+                
+                // Add current month's days
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                for (let i = 1; i <= daysInMonth; i++) {
+                    const currentDate = new Date(year, month, i);
+                    const isToday = currentDate.getTime() === today.getTime();
+                    const dayElement = createCalendarDay(i, isToday ? 'today' : '', currentDate);
+                    calendarGrid.appendChild(dayElement);
+                }
+                
+                // Add next month's days to fill the grid
+                const totalDaysDisplayed = firstDayOfMonth + daysInMonth;
+                const nextMonthDays = 42 - totalDaysDisplayed; // 6 rows of 7 days
+                
+                const nextMonth = month === 11 ? 0 : month + 1;
+                const nextMonthYear = month === 11 ? year + 1 : year;
+                
+                for (let i = 1; i <= nextMonthDays; i++) {
+                    const dayElement = createCalendarDay(i, 'other-month', new Date(nextMonthYear, nextMonth, i));
+                    calendarGrid.appendChild(dayElement);
+                }
+            }
+
+            function createCalendarDay(dayNumber, additionalClass, date) {
+                const dayElement = document.createElement('div');
+                dayElement.className = `calendar-day ${additionalClass || ''}`;
+                
+                const dayNumberElement = document.createElement('div');
+                dayNumberElement.className = 'calendar-day-number';
+                dayNumberElement.textContent = dayNumber;
+                dayElement.appendChild(dayNumberElement);
+                
+                // Add tasks for this day
+                const tasksForDay = tasks.filter(task => {
+                    if (!task.dueDate) return false;
+                    
+                    const taskDate = new Date(task.dueDate);
+                    return taskDate.getFullYear() === date.getFullYear() && 
+                           taskDate.getMonth() === date.getMonth() && 
+                           taskDate.getDate() === date.getDate();
+                });
+                
+                tasksForDay.forEach(task => {
+                    const taskElement = document.createElement('div');
+                    taskElement.className = `calendar-task ${task.priority}`;
+                    taskElement.textContent = task.name;
+                    taskElement.dataset.taskId = task.id;
+                    
+                    taskElement.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        showTaskDetails(task.id);
+                    });
+                    
+                    dayElement.appendChild(taskElement);
+                });
+                
+                return dayElement;
+            }
+
+            function setupEventListeners() {
+                // Filter and sort events
+                document.getElementById('priorityFilter').addEventListener('change', renderTaskBoard);
+                document.getElementById('sortBy').addEventListener('change', renderTaskBoard);
+                
+                // Add task button - now navigates to the add task page
+                document.getElementById('addTaskBtn').addEventListener('click', function() {
+                    document.getElementById('mainPage').classList.remove('active');
+                    document.getElementById('addTaskPage').classList.add('active');
+                });
+                
+                // Back to main button
+                document.getElementById('backToMainBtn').addEventListener('click', function() {
+                    document.getElementById('addTaskPage').classList.remove('active');
+                    document.getElementById('mainPage').classList.add('active');
+                });
+                
+                // Cancel add task button
+                document.getElementById('cancelAddBtn').addEventListener('click', function() {
+                    document.getElementById('addTaskPage').classList.remove('active');
+                    document.getElementById('mainPage').classList.add('active');
+                });
+                
+                // Close modals
+                document.getElementById('closeModal').addEventListener('click', function() {
+                    const modal = document.getElementById('taskModal');
+                    modal.classList.remove('active');
+                });
+                
+                document.getElementById('closeTaskBtn').addEventListener('click', function() {
+                    const modal = document.getElementById('taskModal');
+                    modal.classList.remove('active');
+                });
+                
+                document.getElementById('closeEditModal').addEventListener('click', function() {
+                    const modal = document.getElementById('editTaskModal');
+                    modal.classList.remove('active');
+                });
+                
+                document.getElementById('cancelEditBtn').addEventListener('click', function() {
+                    const modal = document.getElementById('editTaskModal');
+                    modal.classList.remove('active');
+                });
+                
+                // Delete confirmation modal events
+                document.getElementById('closeDeleteModal').addEventListener('click', function() {
+                    const modal = document.getElementById('deleteConfirmModal');
+                    modal.classList.remove('active');
+                });
+                
+                document.getElementById('cancelDeleteBtn').addEventListener('click', function() {
+                    const modal = document.getElementById('deleteConfirmModal');
+                    modal.classList.remove('active');
+                });
+                
+                document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+                    const taskId = this.dataset.taskId;
+                    deleteTask(taskId);
+                    
+                    // Close the modal
+                    const modal = document.getElementById('deleteConfirmModal');
+                    modal.classList.remove('active');
+                });
+                
+                // Edit task button in task details modal
+                document.getElementById('editTaskBtn').addEventListener('click', function() {
+                    const taskId = this.dataset.taskId;
+                    editTask(taskId);
+                });
+                
+                // Add task form submission
+                document.getElementById('addTaskForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    const newTask = {
+                        id: 'task_' + Date.now(),
+                        name: document.getElementById('newTaskName').value,
+                        description: document.getElementById('newTaskDescription').value,
+                        assignedTo: document.getElementById('newTaskAssignedTo').value,
+                        priority: document.getElementById('newTaskPriority').value,
+                        status: document.getElementById('newTaskStatus').value,
+                        dueDate: document.getElementById('newTaskDueDate').value || null
+                    };
+                    
+                    tasks.push(newTask);
+                    localStorage.setItem('priorityQueueTasks', JSON.stringify(tasks));
+                    
+                    // Update all views
+                    updateDashboard();
+                    renderTaskBoard();
+                    
+                    // Reset form and go back to main page
+                    this.reset();
+                    document.getElementById('addTaskPage').classList.remove('active');
+                    document.getElementById('mainPage').classList.add('active');
+                });
+                
+                // Edit task form submission
+                document.getElementById('editTaskForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    const taskId = document.getElementById('editTaskId').value;
+                    const taskIndex = tasks.findIndex(task => task.id === taskId);
+                    
+                    if (taskIndex !== -1) {
+                        tasks[taskIndex] = {
+                            id: taskId,
+                            name: document.getElementById('editTaskName').value,
+                            description: document.getElementById('editTaskDescription').value,
+                            assignedTo: document.getElementById('editTaskAssignedTo').value,
+                            priority: document.getElementById('editTaskPriority').value,
+                            status: document.getElementById('editTaskStatus').value,
+                            dueDate: document.getElementById('editTaskDueDate').value || null
+                        };
+                        
+                        localStorage.setItem('priorityQueueTasks', JSON.stringify(tasks));
+                        
+                        // Update all views
+                        updateDashboard();
+                        renderTaskBoard();
+                        
+                        // Close modal
+                        const modal = document.getElementById('editTaskModal');
+                        modal.classList.remove('active');
+                    }
+                });
+
+                // Calendar view button
+                document.getElementById('calendarViewBtn').addEventListener('click', function() {
+                    renderCalendar(currentMonth, currentYear);
+                    document.getElementById('calendarModal').classList.add('active');
+                });
+
+                // Calendar navigation
+                document.getElementById('prevMonthBtn').addEventListener('click', function() {
+                    currentMonth--;
+                    if (currentMonth < 0) {
+                        currentMonth = 11;
+                        currentYear--;
+                    }
+                    renderCalendar(currentMonth, currentYear);
+                });
+
+                document.getElementById('nextMonthBtn').addEventListener('click', function() {
+                    currentMonth++;
+                    if (currentMonth > 11) {
+                        currentMonth = 0;
+                        currentYear++;
+                    }
+                    renderCalendar(currentMonth, currentYear);
+                });
+
+                document.getElementById('todayBtn').addEventListener('click', function() {
+                    const today = new Date();
+                    currentMonth = today.getMonth();
+                    currentYear = today.getFullYear();
+                    renderCalendar(currentMonth, currentYear);
+                });
+
+                // Close calendar modal
+                document.getElementById('closeCalendarBtn').addEventListener('click', function() {
+                    document.getElementById('calendarModal').classList.remove('active');
+                });
+            }
+        });
+    </script>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+
+<script>
+  // TODO: Replace with your actual Firebase project configuration
+  const firebaseConfig = {
+	apiKey: "AIzaSyBDM09ziYYdZxeLgWYHdcYcuYPJ0THeHVA",
+	authDomain: "priority-queue-tracker.firebaseapp.com",
+	projectId: "priority-queue-tracker",
+	storageBucket: "priority-queue-tracker.firebasestorage.app",
+	messagingSenderId: "704648224617",
+	appId: "1:704648224617:web:1934c11499d1aef2a7a7f8",
+  };
+
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+  const storage = firebase.storage();
+</script>
+
+<!-- File Upload UI -->
+<div>
+  <input type="file" id="fileInput" />
+  <button onclick="uploadFile()">Upload to Firebase Storage</button>
+  <p id="uploadStatus"></p>
+</div>
+
+<script>
+  function uploadFile() {
+    const file = document.getElementById('fileInput').files[0];
+    if (!file) {
+      document.getElementById('uploadStatus').innerText = "Please select a file first.";
+      return;
+    }
+
+    const storageRef = storage.ref('uploads/' + file.name);
+    const uploadTask = storageRef.put(file);
+
+    uploadTask.on('state_changed',
+      function progress(snapshot) {
+        const percent = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        document.getElementById('uploadStatus').innerText = "Upload is " + percent.toFixed(2) + "% done";
+      },
+      function error(err) {
+        document.getElementById('uploadStatus').innerText = "Upload failed: " + err;
+      },
+      function complete() {
+        uploadTask.snapshot.ref.getDownloadURL().then(function(downloadURL) {
+          document.getElementById('uploadStatus').innerHTML = "Upload successful! <a href='" + downloadURL + "' target='_blank'>Download File</a>";
+        });
+      }
+    );
+  }
+</script>
+
+</body>
+</html>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'95feb6d435db8484',t:'MTc1MjYzOTcwMS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
